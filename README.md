@@ -1001,7 +1001,7 @@ There are several ways to standardize the lift metric, but one common approach i
 The **standardized lift** of an association rule $I \rightarrow j$ can be calculated as follows:
 
 $$
-\text{standardized\_lift}(I \rightarrow j) = \frac{{\text{lift}(i \rightarrow j) - \frac{ \max \left\{ {P(I) + P(j) - 1}, 1 / N \right\}}{P(i)P(j)} }}{{ \frac{1}{\max \{ P(I), P(j) \}} - \frac{ \max \left\{ {P(I) + P(j) - 1}, 1 / N \right\} }{P(i)P(j)}}}$$
+\text{standardized}\_\text{lift}(I \rightarrow j) = \frac{{\text{lift}(i \rightarrow j) - \frac{ \max \left\{ {P(I) + P(j) - 1}, 1 / N \right\}}{P(i)P(j)} }}{{ \frac{1}{\max \{ P(I), P(j) \}} - \frac{ \max \left\{ {P(I) + P(j) - 1}, 1 / N \right\} }{P(i)P(j)}}}$$
 
 
 where:
