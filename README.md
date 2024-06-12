@@ -4,22 +4,32 @@ Define styles for the document
 <style>
     /* increase font size of the headers to double of the default size */
     h1 {
-        font-size: 2.5em;
+        font-size: 2.8em!important;
     }
     h2 {
-        font-size: 2.2em;
+        font-size: 2.5em!important;
     }
     h3 {
-        font-size: 1.9em;
+        font-size: 2.3em!important;
     }
     h4 {
-        font-size: 1.6em;
+        font-size: 2.0em!important;
     }
     h5 {
-        font-size: 1.3em;
+        font-size: 1.7em!important;
     }
     h6 {
-        font-size: 1.1em;
+        font-size: 1.5em!important;
+    }
+    .h7 {
+        font-size: 1.3em!important;
+        font-weight: bold!important;
+        margin-bottom: 1em!important;
+    }
+    .h8 {
+        font-size: 1.1em!important;
+        font-weight: bold!important;
+        margin-bottom: 1em!important;
     }
 
 </style>
@@ -84,11 +94,40 @@ Define styles for the document
             1. [Lift](#lift)
             1. [Standardized Lift](#standardized-lift)
         1. [Algorithms for finding frequent itemsets](#algorithms-for-finding-frequent-itemsets)
-            1. [Finding frequent pairs](#finding-frequent-pairs)
-            1. [A-Priori Algorithm](#a-priori-algorithm)
-            1. [PCY Algorithm](#pcy-algorithm)
-            1. [PCY extensions](#pcy-extensions)
-            1. [Frequent itemsets in ≤ 2](#frequent-itemsets-in-2-passes)
+            1. [Mining Association Rules](#mining-assoc-rules)
+                1. [Example](#mining-assoc-rules-example)
+                1. [Compact Output](#mining-assoc-rules-compact-output)
+            1. [Finding frequent itemsets](#finding-frequent-itemsets)
+                1. [Finding Frequent Pairs](#find-frequent-pairs)
+                    1. [Triangular matrix](#counting-all-pairs-using-a-triangular-matrix)
+                    1. [Table of triples](#keeping-a-table-of-triples)
+                1. [Monotonicity of Itemsets](#monotonicity-of-itemsets)
+                1. [A-Priori Algorithm](#a-priori-algorithm)
+                    1. [Operational Workflow (2 passes)](#a-priori-operational-workflow)
+                        1. [Memory Usage](#a-priori-memory-usage)
+                    1. [Operational Workflow (more than 2 passes)](#a-priori-operational-workflow)
+                        1. [Example](#a-priori-example)
+                1. [PCY Algorithm](#pcy-algorithm)
+                    1. [Pass 1](#pcy-pass-1)
+                    1. [Pass 2](#pcy-pass-2)
+                    1. [Memory Usage](#pcy-memory-usage)
+                    1. [Buckets](#pcy-buckets)
+                    1. [Multistage PCY](#pcy-multistage)
+                        1. [Conditions for Candidate Pairs](#pcy-multistage-condition)
+                        1. [Operational Workflow](#pcy-multistage-operation)
+                        1. [Multihash](#pcy-multihash)
+                1. [Frequent Itemsets (Less Than 2 Passes)](#frequent-itemsets-lt-2-passes)
+                    1. [Random Sampling](#random-sampling)
+                    1. [SON Algorithm](#son-algorithm) 
+                        1. [Steps](#son-algorithm-steps)  
+                        1. [MapReduce Implementation](#son-algorithm-mapreduce)
+                        1. [Key Points](#son-algorithm-key-points)
+                    1. [Toivonen Algorithm](#toivonen-algorithm)
+                        1. [Steps](#toivonen-algorithm-steps)
+                        1. [Theorem and Implications](#toivonen-algorithm-theorem)
+            1. [Summary](#frequent-itemsets-and-association-rules-summary)
+                1. [Frequent Itemsets (2 Full Passes)](#frequent-itemsets-and-association-rules-summary-2-full-passes)
+                1. [Frequent Itemsets (Less Than 2 Passes)](#frequent-itemsets-and-association-rules-summary-less-2-passes)
 
 <h2 id="course-overview"> Course Overview </h2>
 
@@ -1085,38 +1124,709 @@ The following image illustrates the concept of **maximal frequent itemsets**, **
 
 In the example above, there are 2 maximal frequent itemsets: $\{A, B\}$ and $\{B, C\}$. These itemsets are maximal because they have no immediate supersets that are frequent. There are 4 closed itemsets: $\{B\}$, $\{A, B\}$, $\{B, C\}$, and $\{A, B, C\}$. These itemsets are closed because they have a higher support count than any of their immediate supersets.
 
-1. [Frequent Itemsets and Association Rules](#frequent-itemsets-and-association-rules)
-    1. [Motivation](#frequent-itemsets-and-association-rules-motivation)
-    1. [Market Basket Model](#market-basket-analysis)
-        1. [Item-Basket Relationships](#mba-relationship)
-        1. [Applications](#mba-applications)
-        1. [Frequent Itemsets](#frequent-itemsets)
-        1. [Association Rules](#association-rules)
-            1. [Support](#support)
-            1. [Confidence](#confidence)
-            1. [Interest](#interest)
-            1. [Lift](#lift)
-            1. [Standardized Lift](#standardized-lift)
-        1. [Algorithms for finding frequent itemsets](#algorithms-for-finding-frequent-itemsets)
-            1. [Mining Association Rules](#mining-assoc-rules)
-                1. [Example](#mining-assoc-rules-example)
-                1. [Compact Output](#mining-assoc-rules-compact-output)
-            1. [Finding frequent itemsets](#finding-frequent-itemsets)
-                1. [Counting Pairs](#counting-pairs)
-                1. [A-Priori Algorithm](#a-priori-algorithm)
-                1. [PCY Algorithm](#pcy-algorithm)
-
 <h5 id="finding-frequent-itemsets"> Finding frequent itemsets </h5>
 
-- Data stored on disk in flat files, rather than on a database system
-Organized basket-by-basket
-Baskets are small (few items) but there are many baskets and
-many different items
-Expand baskets into pairs, triples, etc. as you read baskets
-Use k nested loops to generate all sets of size k
+Typically, data is kept in flat files, rather than in a database system:
+- **Stored on disk**: Data is stored on disk, and the goal is to minimize the number of disk accesses.
 
-<h6 id="counting-pairs"> Counting Pairs </h6>
+- **Stored basket-by-basket**: Each line represents an item, and each basket is a group of subsequent lines (items) in the file, separated by a delimiter.
+
+- **Baskets are small, but we have many baskets and many items**: Each basket contains a small number of items, but there are many baskets and many items in total.
+    - **Expand baskets into pairs, triples, etc.**: We want to find frequent pairs, triples, etc., of items that appear together in many baskets.
+
+    - **Use $k$ nested loops to generate all sets of size $k$**: For each basket, generate all pairs, triples, etc., of items that appear together in that basket.
+
+<blockquote>
+<p><strong>Note</strong>: We want to find frequent itemsets. To find them, we have to count them. To count them, we have to generate them. </p>
+</blockquote>
+
+The following image illustrates the concept of **flat files** and the structure of the data stored in this format:
+
+<p align="center">
+    <img src="images/flat-file.png" alt="Flat File" width="180"/>
+</p>
+
+In the example above, items are positive integers, and boundaries between baskets are indicated by a special character (e.g., -1).
+
+**How do we measure the cost of mining disk-resident data?**
+
+- The true cost of mining disk-resident data is usually the
+**number of disk I/O's**.
+
+- In practice, algorithms for finding frequent itemsets read the
+data sequentially in **passes** $\rightarrow$ **all baskets read in turn**.
+
+- Running time is proportional to the number of passes made through the basket file times the size of the file.
+
+- Thus, we measure the cost by the number of passes an algorithm makes through the data.
+
+<blockquote>
+<p><strong><cite>"all baskets read in turn"</cite></strong> means that the algorithm reads the baskets sequentially, one after the other, without random access to specific baskets. This sequential reading is more efficient than random access and minimizes disk I/O operations.</p>
+</blockquote>
+
+**What are the main constraints and challenges in mining frequent itemsets?**
+
+- For many frequent-itemset algorithms, **main-memory is the critical resource**.
+
+- As we read baskets, we need to keep counts, e.g. the occurrences of pairs of items $\rightarrow$ **the number of different things we can count is limited by main memory**.
+
+- Swapping counts in/out to disk storage is not feasible due to the high cost of disk I/O $\rightarrow$ **too slow**.
+
+- The hardest problem often turns out to be **finding the frequent pairs of items $\{i, j\}$** that appear together in many baskets.
+
+- We can usually count all the singleton sets in main memory, but counting pairs is often the bottleneck $\rightarrow$ **too many pairs**.
+    - Support threshold is set high enough so that we don't end up with too many frequent itemsets:
+        - Frequent pairs are common, but frequent triples are rare.
+        
+        - Probability of being frequent drops exponentially with size.
+
+<h6 id="find-frequent-pairs"> Finding Frequent Pairs </h6>
+
+The naïve approach to finding frequent pairs involves:
+- Read file once, count occurrences of each pair in main memory.
+    - For each basket, use two nested loops to generate all item pairs and add 1 to the count of each pair.
+
+- Fast, but requires $O(n^2)$ space for $n$ items $\rightarrow$ **not feasible for large datasets**.
+    - Let $n = 10^5$ (100,000 items), and count be a 4-byte integer.
+    - Number of pairs = $n(n-1)/2 = 4.9995 \times 10^9$.
+    - The total space required is $4.9995 \times 10^9 \times 4 = 19.998 \times 10^9$ bytes $\approx 20$ GB.
+
+There are two other basic approaches to finding frequent pairs: **counting all pairs using a triangular matrix** and **keeping a table of triples $[i, j, count]$**.
+- If integers and item ids are $4$ bytes, we need approximately $12$ bytes for each pair with count $\gt 0$, plus some additional overhead for the hashtable.
+
+<blockquote>
+<p><strong>Note</strong>: It is more space-efficient to represent items by consecutive integers from 1 to n. If required, we use a hash table to translate items to integers.
+</blockquote>
+
+<div class="h7" id="counting-all-pairs-using-a-triangular-matrix"> Triangular Matrix </div>
+
+- Let $n$ be the number of items.
+
+- We can use a 2D array $C$ of size $n \times n$ to store the counts of all pairs of items.
+    - Order the pairs and only use the entries in the upper triangle of the matrix to avoid double counting $\rightarrow$ **$[i, j]$ for $i \lt j$**.
+
+    - Half of the 2D array contains zeros, and the other half contains the counts of the pairs. $\rightarrow$ **still consumes too much space**.
+
+- The alternative is to use a 1D array of size $n \times (n-1) / 2$ to store the counts of all pairs of items $[i, j]$ for $i \lt j$.
+    - The index $k$ of the count of pair $[i, j]$ is given by the formula: $$ k = (i - 1) \times (n - i / 2) + j - i$$
+    
+    - This approach is more space-efficient than using a 2D array, but it still requires a large amount of memory for a large number of items.
+
+    - Pair counts stored in lexicographical order: $\{1, 2\}, \{1, 3\}, \{1, 4\}, ..., \{2, 3\}, \{2, 4\}, ..., \{n-1, n\}$.
+
+    - The total space required is $n \times (n - 1) / 2 \times 4$ bytes for a 4-byte integer count $\approx 2n^2$ bytes.
+        - For the previous example with $n = 10^5$, the total space required is $2 \times 10^{10}$ bytes $\approx 20$ GB.
+
+<div class="h7" id="keeping-a-table-of-triples"> Table of triples </div>
+
+- Instead of storing counts for all pairs, we can store counts for triples $[i, j, count]$.
+    - **$12$ bytes per triple**: $4$ bytes for each item id and $4$ bytes for the count.
+
+    - Triples are preferable if $\lt 1/3$ of the pairs actually occur together $\rightarrow$ **most pairs are infrequent**.
+        - For example, if $n = 10^5$, there are $10^{10}$ pairs, but only $10^9$ pairs are frequent.
+        
+        - The total space required is $12 \times 10^9$ bytes $\approx 12$ GB.
+
+    - **Triples are less efficient if most pairs are frequent**.
+
+<h6 id="monotonicity-of-itemsets"> Monotonicity of Itemsets </h6>
+
+**Monotonicity of itemsets** is a property that allows us to prune the search space when finding frequent itemsets. It states that if an itemset is frequent, then all of its subsets are also frequent.
+
+This can be formalized as follows:
+- Let $I$ be a frequent itemset, and $J$ be a subset of $I$.
+
+- If $\text{support}(I) \geq \sigma$, then $\text{support}(J) \geq \sigma$.
+
+- If a set $I$ of items is frequent, then so is every subset of $I$ $\rightarrow$ an itemset cannot be frequent unless all of its subsets are $\rightarrow$ **Monotonicity property**.
 
 <h6 id="a-priori-algorithm"> A-Priori Algorithm </h6>
 
+The **A-Priori algorithm** is a popular algorithm for finding frequent itemsets in a dataset. It uses the **monotonicity of itemsets** to **reduce the number of pairs that must be counted** $\rightarrow$ **prunes the search space**.
+
+It requires **two passes** over the data to find frequent pairs:
+1. **First pass**: Count the occurrences of each item in the dataset $\rightarrow$ **C1**.
+    - Discard items that are not frequent $\rightarrow$ **L1**.
+
+2. **Second pass**: Count the occurrences of pairs of items in the dataset $\rightarrow$ **C2**.
+    - Discard pairs that are not frequent $\rightarrow$ **L2**.
+
+In general, the algorithm uses $k$ passes to find frequent itemsets of size $k$.
+
+<div class="h7" id="a-priori-operational-workflow"> Operational Workflow (2 passes)</div>
+
+The algorithm with 2 passes to find frequent pairs is as follows:
+```python
+# first pass
+for each basket:
+    for each item i in basket:
+        C1[i] += 1
+
+# create frequent items table
+L1 = items in counts with count >= min_support
+
+# second pass
+for each item i in basket:
+    if i not in L1: continue
+    for each item j in basket (j > i):
+        if j in L1:
+            C2[i, j] += 1
+```
+
+<div class="h8" id="a-priori-memory-usage"> Memory Usage </div>
+
+The following image illustrates the memory usage during two passes of an A-Priori algorithm.
+
+<p align="center">
+    <img src="images/memory-usage.png" alt="A-Priori Memory Usage" width="400"/>
+</p>
+
+- **Pass 1**: The algorithm maps item names to integers and counts the occurrences of each item to identify frequent items.
+    - **Item names to integers**: In this initial step, item names are mapped to unique integers. This helps in efficiently counting the items by using integer identifiers instead of string names.
+
+    - **Item counts**: The algorithm then counts the occurrences of each item in the dataset. This count helps in identifying frequent items based on a predefined minimum support threshold.
+
+- **Pass 2**: Using the frequent items identified in Pass 1, the algorithm focuses on counting pairs of these frequent items to find frequent item pairs.
+    - **Item names to integers**: The mapping from item names to integers is reused in this pass for consistency and efficiency.
+
+    - **Frequent items table**: After identifying frequent items in Pass 1, this table stores those items that meet or exceed the minimum support threshold. Items not meeting the threshold are excluded or mapped to 0.
+
+    - **Counts of pairs of frequent items (candidate pairs)**: In this step, the algorithm counts the occurrences of pairs of frequent items. This is essential for identifying frequent item pairs in the dataset.
+
+- The frequent items table can be implemented as a set, where each item is either marked as frequent or not.
+
+- To store pair counts, a triangular matrix can be used.
+    - The frequent items table maps the range $1..n$ to $1..m$, where $m$ 
+    is the number of frequent items.
+    
+    - Items that are not frequent are mapped to 0.
+
+This memory usage model ensures efficient handling of data by reducing the complexity through integer mapping and **focusing only on frequent items in the subsequent pass**, which optimizes both time and space complexity of the A-Priori algorithm.
+
+<div class="h7" id="a-priori-operational-workflow"> Operational Workflow (more than 2 passes)</div>
+
+The algorithm can be generalized to $k$ passes to find frequent itemsets of size $k$.
+
+<p align="center">
+    <img src="images/apriori-kgt2.png" alt="A-Priori Algorithm" width="600"/>
+    width="600"/>
+</p>
+
+- For each pass $k$, the algorithm constructs two sets of $k$-sets (sets of size $k$):
+    - **$C_k$ = Candidate itemsets**: sets that **might be frequent**.
+
+    - **$L_k$ = Frequent itemsets**: sets that are **truly frequent**.
+
+- $C_2$, $C_3$, $C_4$, ..., $C_k$ are "constructed" implicitly from $L_1$, $L_2$, $L_3$, ..., $L_{k-1}$, respectively.
+
+- For $C_{k+1}$, all subsets of size $k$ need to be in $L_k$. If not, the itemset is pruned.
+    - **Construction**: take a set from $L_k$, add a new frequent item (from $L_1$), then check if all subsets are in $L_k$.
+
+<div class="h8" id="a-priori-example"> Example </div>
+
+Consider the following dataset and we will find frequent itemsets and generate association rules for them.
+
+Minimum support threshold ( $\sigma ) = 2$.
+
+
+| Transaction ID | Items Purchased |
+|:--------------:|:---------------:|
+| 1              | 1, 2, 5         |
+| 2              | 2, 4            |
+| 3              | 2, 3            |
+| 4              | 1, 2, 4         |
+| 5              | 1, 3            |
+| 6              | 2, 3            |
+| 7              | 1, 3            |
+| 8              | 1, 2, 3, 5      |
+| 9              | 1, 2, 3         |
+
+
+**K = 1**:
+
+- Create a table containing the support count of each item present in the dataset $\rightarrow$ **$C_1$ (candidate set)**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1       | 6             |
+    | 2       | 7             |
+    | 3       | 6             |
+    | 4       | 2             |
+    | 5       | 2             |
+
+- Compare the support count of each item in **$C_1$** with the minimum support threshold $\sigma$ to find frequent items $\rightarrow$ **$L_1$ (frequent itemset)**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1       | 6             |
+    | 2       | 7             |
+    | 3       | 6             |
+    | 4       | 2             |
+    | 5       | 2             |
+
+**K = 2**:
+- Generate candidate set **$C_2$** using **$L_1$** (this is called join step). Condition of joining **$L_{k-1}$** and **$L_{k-1}$** is that it should have $k - 2$ $(2 - 2 = 0)$ common elements.
+
+- Check if all subsets of an itemset are frequent or not and if not frequent remove that itemset from the candidate set (e.g., the subsets of {1, 2} are {1} and {2}, and both are frequent).
+
+- Find the support count of each itemset by scanning the dataset $\rightarrow$ **$C_2$**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1, 2    | 4             |
+    | 1, 3    | 4             |
+    | 1, 4    | 1             |
+    | 1, 5    | 2             |
+    | 2, 3    | 4             |
+    | 2, 4    | 2             |
+    | 2, 5    | 2             |
+    | 3, 4    | 0             |
+    | 3, 5    | 1             |
+    | 4, 5    | 0             |
+
+- Compare the support count of each itemset in **$C_2$** with the minimum support threshold $\sigma$ to find frequent itemsets $\rightarrow$ **$L_2$**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1, 2    | 4             |
+    | 1, 3    | 4             |
+    | 1, 5    | 2             |
+    | 2, 3    | 4             |
+    | 2, 4    | 2             |
+    | 2, 5    | 2             |
+
+**K = 3**:
+
+- Generate candidate set **$C_3$** using **$L_2$** (join step). Condition of joining **$L_{k-1}$** and **$L_{k-1}$** is that it should have $k - 2$ $(3 - 2 = 1)$ common elements. 
+    - The first element should match (items in the itemset are in lexicographical order).
+
+    - So the itemsets generated by joining $L_2$ are {1, 2, 3}, {1, 2, 5}, {1, 3, 5}, {2, 3, 4}, and {2, 3, 5}.
+
+- Check if all subsets of an itemset are frequent or not and if not frequent remove that itemset from the candidate set.
+    - The subsets of {1, 2, 3} are {1, 2}, {1, 3}, and {2, 3}, and all are frequent.
+
+    - For the itemset {2, 3, 4}, the subsets are {2, 3}, {2, 4}, and {3, 4}. {3, 4} is not frequent, so the itemset {2, 3, 4} is not frequent $\rightarrow$ **remove it**.
+
+- Find the support count of each itemset by scanning the dataset $\rightarrow$ **$C_3$**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1, 2, 3 | 2             |
+    | 1, 2, 5 | 2             |
+
+- Compare the support count of each itemset in **$C_3$** with the minimum support threshold $\sigma$ to find frequent itemsets $\rightarrow$ **$L_3$**.
+
+    | Itemset | Support Count |
+    |:-------:|:-------------:|
+    | 1, 2, 3 | 2             |
+    | 1, 2, 5 | 2             |
+
+**K = 4**:
+
+- Generate candidate set **$C_4$** using **$L_3$** (join step). Condition of joining **$L_{k-1}$** and **$L_{k-1}$** is that it should have $k - 2$ $(4 - 2 = 2)$ common elements. 
+    - The first two elements should match (items in the itemset are in lexicographical order).
+
+- Check if all subsets of an itemset are frequent or not and if not frequent remove that itemset from the candidate set.
+    - The itemset formed by joining $L_3$ is {1, 2, 3, 5}. The subsets of {1, 2, 3, 5} contain {1, 3, 5} which is not frequent $\rightarrow$ **remove it**.
+
+- We stop here as we have reached the maximum size of the itemset $\rightarrow$ **$C_4$ is empty**.
+
 <h6 id="pcy-algorithm"> PCY Algorithm </h6>
+
+The PCY (Park-Chen-Yu) algorithm is a notable algorithm for frequent itemset mining in the context of market basket analysis. It's an **extension of the Apriori algorithm**, optimized to **reduce the number of candidate pairs** by using hashing and a bitmap to filter out infrequent item pairs early in the process. 
+
+<div class="h7" id="pcy-pass-1"> Pass 1 </div>
+
+In pass 1 of A-Priori, only individual item counts are stored $\rightarrow$ **use the idle memory to reduce memory required in pass 2**.
+
+The **PCY algorithm** uses an array of integers that generalizes the idea of a **bloom filter**.
+
+- **Hashing Pairs**: During the **first pass** over the data, the PCY algorithm counts individual items and uses additional memory to store counts of **hashed item pairs in buckets**.
+
+- **Frequent Buckets**: Buckets with counts exceeding a support threshold $\sigma$ are marked as frequent. This helps to identify which pairs of items might be frequent.
+    - Any bucket containing at least one frequent pair is surely a frequent bucket $\rightarrow$ **no false negatives**.
+
+    - Not all frequent buckets contain frequent pairs $\rightarrow$ **some false positives**.
+        - But, any pair that hashes to a non-frequent bucket can not be a frequent pair $\rightarrow$ **no false negatives**.
+
+The first pass of the algorithm is described as follows:
+```python
+# first pass
+for each basket:
+    for each item i in basket:
+        C1[i] += 1
+
+    for each pair of items i, j in basket:
+        bucket = hash(i, j) % B
+        B1[bucket] += 1
+```
+
+<blockquote>
+<p><strong>Note</strong>: we are not keeping counts for each individual pair.<br>  
+Instead of storing and incrementing counts for each item pair directly, the algorithm uses a hash table to count the number of pairs that hash to the same bucket. This helps reduce memory usage.
+</p>
+</blockquote>
+
+**We can stop incrementing when count reaches the support threshold $\sigma$**. This means:
+- **For individual items**: Once an item count reaches $\sigma$ we know it is frequent, so further increments are unnecessary.
+
+- **For buckets**: Once a bucket's count reaches $\sigma$, it indicates that the bucket contains potentially frequent pairs. Further increments don't change this fact.
+
+The main goal of the first pass is to identify candidates for frequent itemsets. Once an item or a bucket is known to meet the support threshold, the algorithm can shift focus to identifying and counting other candidates. This offers several advantages:
+- **Reduced Computational Overhead**: Stopping the count early avoids unnecessary calculations, leading to faster execution.
+
+- **Memory Efficiency**: Memory resources are conserved by not maintaining counts beyond the required threshold.
+
+- **Improved Performance**: By focusing computational efforts on the items and pairs that matter (those that reach the threshold), the algorithm performs better, especially on large datasets.
+
+<div class="h7" id="pcy-pass-2"> Pass 2 </div>
+
+- **Between Passes**: The algorithm replaces the bucket counts with a bit-vector:
+    - 1 if the bucket is frequent (count $\geq \sigma$), 0 otherwise.
+
+    - $4$-byte integers are replaced by bits; takes $1/32$ of memory $\rightarrow$ **more efficient**.
+
+    - Also create a frequent items table, as in A-Priori.
+
+
+- **Candidate Pairs**: In the **second pass**, the algorithm only counts pairs of items that are both frequent and hash to a frequent bucket.
+    - Count only pairs $\{i, j\}$ that meet the conditions for being a candidate pair:
+        - Both $i$ and $j$ are frequent items.
+        
+        - The pair $\{i, j\}$ hashes to a frequent bucket (bit set to $1$).
+
+<div class="h7" id="pcy-memory-usage"> Memory Usage </div>
+
+The following image shows the memory usage during the two passes of the PCY (Park-Chen-Yu) algorithm, which is used in frequent itemset mining.
+
+<p align="center">
+    <img src="images/pcy-memory-usage.png" alt="PCY Memory Usage" width="400"/>
+</p>
+
+- **Pass 1**:
+    - **Item names to integers**: This area stores the mapping from item names to integer IDs.
+
+    - **Item counts**: This area stores the counts of individual items.
+
+    - **Hash table for bucket counts**: This is the largest area in the memory and stores the counts of pairs of items hashed into buckets. This hash table is used to determine which buckets have potentially frequent pairs.
+
+- **Pass 2**:
+    - **Item names to integers**: Same as in Pass 1.
+
+    - **Frequent items table**: Stores only those items that are frequent (meet the minimum support threshold).
+
+    - **Bitmap**: This is a compressed version of the hash table from Pass 1. It is smaller and stores bits indicating which buckets have frequent pairs.
+
+    - **Counts of candidate pairs**: This is where counts of pairs of frequent items are stored to determine which pairs are frequent.
+
+1. **Why should the hash table take most of the available memory?**
+
+    The hash table should take most of the available memory because it is used to store the counts of pairs of items hashed into buckets. To efficiently count pairs and avoid excessive collisions, the hash table needs to be as large as possible. A larger hash table reduces the probability of different item pairs hashing to the same bucket, thus providing more accurate frequency estimates.
+
+2. **Why is the hash table bigger than the bitmap?**
+
+    The hash table is bigger than the bitmap because the hash table stores actual counts of pairs hashed into buckets, which require more space. Each entry in the hash table holds a count, which typically takes more memory than a single bit. In contrast, the bitmap is a compressed version where each bit indicates whether the corresponding bucket's count was above the support threshold or not, thus requiring significantly less space.
+
+3. **In PCY we cannot use a triangular matrix in pass 2. Why?**
+
+    In PCY, we cannot use a triangular matrix in pass 2 because the algorithm does not store counts for all pairs of items directly. Instead, it uses a hash table to count the number of pairs that hash to the same bucket. This approach helps reduce memory usage and computational overhead by focusing on frequent pairs that hash to frequent buckets. As a result, the algorithm does not maintain counts for all pairs, making the use of a triangular matrix impractical in this context.
+
+<div class="h7" id="pcy-buckets"> Buckets </div>
+
+- If a frequent pair hashes to bucket $b$, bucket $b$ will be frequent:
+    - **No false negatives**: If a bucket contains a frequent pair, it is frequent.
+
+    - **False positives**: If a bucket is frequent, it may not contain frequent pairs.
+
+- Other pairs that hash to this bucket will be counted in the second pass, unless one of its items is not frequent.
+
+- A bucket can be frequent event if all pairs that hash into it are not frequent 
+$\rightarrow$ These pairs cannot be eliminated from the second pass.
+
+- Best case occurs when the final bucket count is less than the support threshold $\sigma$ $\rightarrow$ **no need to count any of the pairs that hash into such a bucket** $\rightarrow$ **fewer pairs to count in the second pass**.
+
+<div class="h7" id="pcy-multistage"> Multistage PCY </div>
+
+This method is an extension of the PCY algorithm, utilizing multiple hash functions to reduce the number of candidate pairs that need to be counted in subsequent passes.
+
+The provided diagram illustrates a multistage algorithm used for finding frequent item pairs in a large dataset.
+
+<p align="center">
+    <img src="images/pcy-multistage.png" alt="Multistage PCY" width="600"/>
+</p>
+
+- **Pass 1**:
+    - **Item names to integers**: Convert item names to integer identifiers for efficient processing.
+
+    - **Item counts**: Count the occurrences of each individual item.
+
+    - **Hash table for bucket counts**: Use a hash function to map item pairs to buckets and count how many pairs fall into each bucket.
+
+    - **Bitmap 1**: Create a bitmap where each bit represents whether a bucket is frequent (i.e., its count is above a certain threshold).
+
+- **Pass 2**:
+    - **Frequent items table**: Use the table of frequent items from Pass 1 to filter out infrequent pairs.
+
+    - **Bitmap 1**: Use the first bitmap to further filter candidate pairs.
+
+    - **Second hash table for bucket counts**: Use a second hash function to map item pairs to a different set of buckets. This helps reduce false positives by ensuring that only pairs that hash to frequent buckets in both hash functions are considered frequent.
+
+    - **Bitmap 2**: After counting the bucket frequencies with the second hash function, create another bitmap for the second set of buckets.
+
+- **Pass 3**:
+    - **Frequent items table**: The table of frequent items from Pass 1.
+
+    - **Bitmap 1 and Bitmap 2**: Both bitmaps are used to further filter candidate pairs.
+
+    - **Counts of candidate pairs**: Count the occurrences of candidate pairs that pass the filtering criteria of both bitmaps.
+
+<div class="h8" id="pcy-multistage-condition"> Conditions for Candidate Pairs </div>
+
+For a pair to be considered a candidate pair in the multistage algorithm, it must meet the following conditions:
+
+- **Both items are frequent**: Each item in the pair must be frequent based on the counts from Pass 1.
+
+- **Pair hashes to a frequent bucket in Bitmap 1**: The pair, when hashed using the first hash function, must map to a bucket that is marked as frequent (bit set to 1) in Bitmap 1.
+
+- **Pair hashes to a frequent bucket in Bitmap 2**: The pair, when hashed using the second hash function, must also map to a bucket that is marked as frequent (bit set to 1) in Bitmap 2.
+
+Using **two different and independent hash functions helps to reduce the number of false positives**. A pair must hash to a frequent bucket in both hash tables, making it less likely for infrequent pairs to be incorrectly identified as frequent.
+
+<div class="h8" id="pcy-multistage-operation"> Operational Workflow </div>
+
+The multistage algorithm aims to efficiently find frequent item pairs in large datasets by using multiple passes and hash functions to filter out infrequent pairs. Here's a step-by-step explanation:
+
+- **Pass 1**:
+    - Count the occurrences of individual items.
+    
+    - Use a hash function to map item pairs to buckets and count the occurrences in each bucket.
+    
+    - Create a bitmap indicating which buckets are frequent.
+
+- **Pass 2**:
+    - Consider only items that were frequent in Pass 1.
+    
+    - Use the first bitmap to filter pairs that hash to frequent buckets.
+    
+    - Use a second hash function to map these pairs to new buckets and count the occurrences.
+    
+    - Create a second bitmap indicating which buckets are frequent with the second hash function.
+
+- **Pass 3**:
+    - Use the frequent items and both bitmaps to further filter pairs.
+    
+    - Count the occurrences of pairs that meet all the conditions for being a candidate pair.
+
+<div class="h8" id="pcy-multihash"> Multihash </div>
+
+The image below illustrates the concept of **multihash** in the context of the PCY algorithm. Multihash involves using multiple hash functions to map pairs of items to different buckets, allowing for more efficient filtering of infrequent pairs.
+
+<p align="center">
+    <img src="images/multihash.png" alt="Multihash" width="400"/>
+</p>
+
+- **Each hash table has half the number of buckets**: Instead of using a single large hash table, the method employs two smaller hash tables, each with half the total number of buckets. This helps in distributing the hash values more efficiently.
+
+- **Must ensure that the count in most buckets does not reach the support threshold $\sigma$**: The goal is to make sure that the number of item pairs hashing to any given bucket does not frequently exceed this threshold, which helps in identifying frequent pairs accurately.
+
+- **Pair is candidate if both items are frequent and if pair hashes to frequent buckets according to both functions**: An item pair is considered a candidate for being frequent if both items are individually frequent, and the pair hashes to buckets that are marked as frequent in both hash tables.
+
+**$j$ hash functions $\approx$ benefits of $j$ stages of multistage**: Using multiple hash functions ($j$ hash functions) provides a similar advantage to using multiple stages of processing. Each additional hash function helps in reducing false positives, thereby increasing the accuracy of identifying frequent item pairs.
+
+<h6 id="frequent-itemsets-lt-2-passes"> Frequent Itemsets (Less Than 2 Passes) </h6>
+
+Previous algorithms (**A-Priori**, **PCY**, etc.) need $k$ passes over data to find frequent itemsets of size $k$.
+
+- **Can we find frequent itemsets with fewer passes?**
+    - Some algorithms use 2 or fewer passes for all sizes, at the expense of possibly missing some frequent itemsets:
+        - Random sampling
+
+        - SON (Savasere, Omiecinski, and Navathe)
+
+        - Toivonen
+
+<blockquote>
+<p><strong>Note</strong>: We don't always need to find all frequent itemsets. Sometimes, it's enough to find a representative sample of frequent itemsets. The reason is that the number of frequent itemsets can grow exponentially with the number of items, making it impractical to find them all.</p>
+</blockquote>
+
+<div class="h7" id="random-sampling"> Random Sampling </div>
+
+The **random sampling** method is an approach to finding frequent itemsets that uses a sample of the data to identify frequent itemsets without requiring multiple passes over the entire dataset. This method is particularly useful for large datasets where processing the entire dataset multiple times is impractical.
+
+In random sampling, a subset of all baskets is taken and kept in memory for processing. The key components of the random sampling method are as follows:
+
+- **Random Sampling**: It involves taking a random subset of all baskets and **keeping this sample in memory**.
+
+- **In-Memory Algorithm**: Run an in-memory algorithm like **A-Priori** on the sample to find **frequent itemsets for each item size** until no frequent items are found.
+    -  No disk I/O required since the sample is in memory $\rightarrow$ **fast**.
+
+- **Support Threshold**: Reduce the support threshold proportionally to match the sample size. 
+    - If the sample is a fraction ( $p$ ) of the baskets, use ( $p \cdot \sigma$ ) as the new threshold, instead of $\sigma$.
+
+This method **may produce false positives and negatives**, which are addressed by **verification and adjusting thresholds**:
+
+- **False Positives**: To avoid them, a **second full pass over the entire dataset** is done to confirm that the candidate pairs found from the sample are truly frequent in the entire data set.
+    - We know which pairs to count.
+
+    - No need to keep the sample in memory.
+
+- **False Negatives**: Frequent sets that were missed in the sample will not be found in this second pass. This is harder to eliminate completely but can be mitigated by using a **smaller support threshold**. For example, $0.8 \times \sigma \times p$.
+    - This requires more memory and time.
+
+<div class="h7" id="son-algorithm"> SON Algorithm </div>
+
+The **SON (Savasere, Omiecinski, and Navathe) algorithm** is a robust method for finding frequent itemsets in large-scale datasets. It **leverages the MapReduce framework** to efficiently process massive data that doesn't fit into memory all at once. The core idea is to split the data into manageable chunks, process these chunks independently to find frequent itemsets, and then aggregate results to determine global frequent itemsets. The algorithm has two main phases: **candidate generation** and **support counting**.
+
+It takes into account the **Monotonicity principle**, discussed earlier:
+- **Monotonicity**: An itemset cannot be frequent in the entire dataset (of baskets) unless it is frequent in at least one subset.
+
+- **Implication**: This principle allows the algorithm to reduce the number of itemsets considered by focusing only on those that are frequent in some subsets.
+
+<div class="h8" id="son-algorithm-steps"> Steps </div>
+
+- **Pass 1: Candidate Generation**
+    - **Data Splitting**: The entire dataset is divided into smaller, manageable chunks or subsets. Each chunk is small enough to fit into the main memory.
+
+    - **In-Memory Processing**: Each chunk is processed independently to find all frequent itemsets within that chunk using an in-memory algorithm such as **A-Priori** or **FP-growth**.
+        - This step is not sampling; the entire dataset is processed in chunks, ensuring that all data is considered.
+
+    - **Candidate Itemset Creation**: Itemsets that are frequent in at least one subset are collected. These itemsets become candidate itemsets for the next phase.
+
+- **Pass 2: Support Counting**
+    - **Support Calculation**: All candidate itemsets are re-evaluated across the entire dataset to count their support.
+
+    - **Determining Frequent Itemsets**: Itemsets that meet or exceed a predefined support threshold are identified as frequent itemsets for the entire dataset.
+
+<div class="h8" id="son-algorithm-mapreduce"> MapReduce Implementation </div>
+
+Each phase of the SON algorithm can be implemented as a **MapReduce** operation:
+- In the first phase, chunks can be processed in parallel to find frequent itemsets. Then, the frequent itemsets found for each chunk are combined to form
+the candidates.
+
+- In the second phase, candidates can be distributed, with each processor counting the support of each candidate in a subset of the baskets. Then, the support counts are aggregated (summed) to get the total support in the whole dataset (global frequent itemsets).
+
+The following is a high-level overview of the SON algorithm implemented using MapReduce:
+
+- **Pass 1: Candidate Generation**
+
+    - **Map Phase**: Each task processes a chunk of the data and finds frequent itemsets within that chunk.
+        - Takes a chunk and applies in-memory algorithm.
+
+        - Produces a set of key-value pairs $(F, 1)$ where $F$ is a frequent itemset from the chunk.
+
+    - **Reduce Phase**: Each task aggregates the frequent itemsets from the map phase to produce a set of candidate itemsets.
+        - Each task is assigned a set of keys (itemsets) and produces those itemsets that appear one or more times
+
+- **Pass 2: Support Counting**
+    - **Map Phase**: Each task takes all candidate itemsets and a chunk of the data, counting occurrences of each candidate in the chunk.
+        - Takes all candidate itemsets (from first Reduce) and a chunk of the data.
+        
+        - Counts occurrences of each candidate in the chunk.
+
+        - Produces a set of key-value pairs $(C, v)$ where $C$ is one of the candidates and $v$ is its support among the baskets in the chunk
+    
+    - **Reduce Phase**: Each task aggregates the support counts from the map phase to determine the global support of each candidate.
+        - Takes a set of keys (itemsets) and sums the values to obtain the total support for each.
+
+        - Selects itemsets with support $\geq \sigma$.
+
+<div class="h8" id="son-algorithm-key-points"> Key Points </div>
+
+- **Avoids False Negatives and Positives**:
+    - **No False Negatives**: No frequent itemset is missed because all chunks are processed.
+
+    - **No False Positives**: Verification in the second phase ensures that only truly frequent itemsets are identified.
+    
+- **Not Sampling**:
+    - The entire dataset is processed in chunks, not just a sample. This ensures all data is considered.
+
+- **Efficiency**:
+    - By breaking down the dataset, the algorithm can handle large data without requiring excessive memory.
+
+- **Parallel Processing**:
+    - MapReduce enables chunks to be processed simultaneously, making the algorithm scalable.
+
+<div class="h7" id="toivonen-algorithm"> Toivonen Algorithm </div>
+
+**Toivonen’s algorithm** is an efficient method for finding frequent itemsets in large datasets. It uses a two-pass approach with a random sample and a negative border to ensure that all frequent itemsets are discovered.
+
+<div class="h8" id="toivonen-algorithm-steps"> Steps </div>
+
+- **Pass 1: Sampling and Finding Candidate Itemsets**
+
+    - **Random Sampling**:
+        - Select a random sample of the dataset.
+
+        - Denote the sample fraction as $p$. For instance, if the sample is $10%$ of the dataset, $p = 0.1$.
+
+    - **Lowering the Support Threshold**:
+        - Adjust the support threshold for the sample to $0.8 \times p \times \sigma$, where $\sigma$ is the original support threshold for the entire dataset.
+
+        - The factor $0.8$ is an example adjustment to capture more candidates from the sample, accounting for sampling variability.
+
+    - **Finding Frequent Itemsets in the Sample**:
+        - Identify all itemsets that are frequent in the sample using the adjusted threshold.
+
+        - Use an in-memory algorithm like A-Priori to find these frequent itemsets.
+
+    - **Identifying the Negative Border**:
+        - Add itemsets that are in the negative border to the list of candidate itemsets.
+
+        - **Negative Border**: An itemset is in the negative border if it is not frequent in the sample, but all of its immediate subsets are frequent.
+
+        - **Example**: If $\{A, B, C, D\}$ is not frequent in the sample, but $\{A, B, C\}$, $\{A, B, D\}$, $\{A, C, D\}$, and $\{B, C, D\}$ are frequent, then $\{A, B, C, D\}$ is in the negative border.
+
+- **Pass 2: Verifying Candidate Itemsets**:
+
+    - **Counting Candidates**:
+        - Count the occurrences of all candidate itemsets frequent itemsets, and also the negative border itemsets, in the entire dataset.
+
+        - This step checks the support for each candidate itemset across the full dataset.
+
+    - **Identifying Frequent Itemsets**:
+        - Determine which of the candidate itemsets meet the original support threshold $\sigma$ for the entire dataset.
+
+<blockquote>
+<p><strong>Note</strong>: <strong>Increasing the factor 0.8 in the support threshold</strong> adjustment can help capture more candidates from the sample. However, this may also increase the number of false positives, as more itemsets will be considered candidates. The trade-off between capturing more candidates and controlling false positives is a key consideration in setting the adjustment factor. </p>
+
+<p>The sample size and the lowered threshold should be chosen such that the <strong>number of candidate itemsets in the second pass is manageable</strong>.</p>
+
+<p>The <strong>probability of having to resample should be low</strong>, ensuring the efficiency of the algorithm.</p>
+</blockquote>
+
+<div class="h8" id="toivonen-algorithm-theorem"> Theorem and Implications </div>
+
+- **Theorem**: If there is an itemset $S$ that is frequent in the full dataset but not in any sample, the negative border must contain at least one itemset that is frequent in the whole dataset.
+
+- **Implications**:
+    - If no itemset from the negative border is frequent in the full dataset, then all frequent itemsets have been identified.
+
+    - If any itemset from the negative border is found to be frequent in the full dataset, it indicates that some frequent itemsets were missed, and a new sample is needed.
+        - Choose the support threshold so the probability of failure is low, while the number of itemsets checked on the second pass is fits in memory.
+
+<h5 id="frequent-itemsets-and-association-rules-summary"> Summary </h5>
+
+<h6 id="frequent-itemsets-and-association-rules-summary-2-full-passes"> Frequent Itemsets (2 Full Passes) </h6>
+
+- **A-Priori Algorithm**: Uses monotonicity property to define candidate pairs.
+
+- **PCY algorithm**: Hash pairs and create a bit array of frequent buckets.
+
+- **Multistage algorithm**: Extension of PCY with multiple hash functions.
+
+<h6 id="frequent-itemsets-and-association-rules-summary-less-2-passes"> Frequent Itemsets (Less Than 2 Passes) </h6>
+
+- **Random Sampling**: 
+    - Run in-memory algorithm on a sample, counting itemsets of all sizes.
+
+    - Do a second pass through entire data to eliminate false positives.
+
+- **SON Algorithm**:
+    - Process entire data in memory-sized chunks, counting itemsets of all sizes.
+
+    - Count all candidates in second pass through entire data.
+
+- **Toivonen Algorithm**:
+    - Count itemsets in negative border.
+
+    - Must repeat with a different sample if itemsets in negative border are frequent in the full dataset.
